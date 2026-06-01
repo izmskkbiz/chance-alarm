@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="チャンスアラーム">
+<meta name="application-name" content="チャンスアラーム">
+<meta name="theme-color" content="#0a0c10">
+<title>チャンスアラーム</title>
+
+<!-- PWA Manifest (inline via blob) -->
+<script>
+(function(){
+  // SVG icon as data URI — cyan lightning bolt on dark bg
+  const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="96" fill="#0a0c10"/>
+    <rect width="512" height="512" rx="96" fill="url(#g)" opacity="0.15"/>
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#00e5ff"/>
+        <stop offset="100%" stop-color="#ff6b35"/>
+      </linearGradient>
+    </defs>
+    <polygon points="296,60 180,280 256,280 216,452 340,220 260,220" fill="#00e5ff"/>
+    <polygon points="296,60 180,280 256,280 216,452 340,220 260,220" fill="url(#g)" opacity="0.6"/>
+  </svg>`;
+  const iconUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+
+  const manifest = {
+    name: "チャンスアラーム",
+    short_name: "チャンスアラーム",
+    description: "5分・15分刻みのチャンスアラーム",
+    start_url: ".",
+    display: "standalone",
+    background_color: "#0a0c10",
+    theme_color: "#0a0c10",
+    orientation: "portrait",
+    icons: [
+      { src: iconUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = url;
+  document.head.appendChild(link);
+
+  // Apple touch icon
+  const appleLink = document.createElement('link');
+  appleLink.rel = 'apple-touch-icon';
+  appleLink.href = iconUrl;
+  document.head.appendChild(appleLink);
+
+  // Favicon
+  const fav = document.createElement('link');
+  fav.rel = 'icon'; fav.href = iconUrl;
+  document.head.appendChild(fav);
+})();
+</script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
+
+:root {
+  --bg: #0a0c10;
+  --surface: #111318;
+  --border: #1e2230;
+  --accent5: #00e5ff;
+  --accent15: #ff6b35;
+  --inactive: #2a2d3a;
+  --text: #e0e4f0;
+  --text-dim: #5a607a;
+  --glow5: 0 0 20px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.12);
+  --glow15: 0 0 20px rgba(255,107,53,0.35), 0 0 60px rgba(255,107,53,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans JP', sans-serif;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: env(safe-area-inset-top, 20px) 16px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  overflow-x: hidden;
+}
+
+/* Grid bg */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(30,34,48,0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,34,48,0.5) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none; z-index: 0;
+}
+
+.container {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 400px;
+}
+
+/* ── Header ── */
+header { text-align: center; margin-bottom: 28px; padding-top: 8px; }
+
+.app-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.35em; color: var(--text-dim);
+  text-transform: uppercase; margin-bottom: 4px;
+}
+
+.clock {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 76px; font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1;
+  color: var(--text);
+  transition: color 0.4s, text-shadow 0.4s;
+}
+.clock.m5  { color: var(--accent5);  text-shadow: var(--glow5); }
+.clock.m15 { color: var(--accent15); text-shadow: var(--glow15); }
+
+.clock-sec {
+  font-size: 30px; color: var(--text-dim);
+  vertical-align: super; margin-left: 2px;
+  transition: color 0.4s;
+}
+.clock.m5  .clock-sec { color: rgba(0,229,255,0.5); }
+.clock.m15 .clock-sec { color: rgba(255,107,53,0.5); }
+
+.date-str { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; margin-top: 6px; }
+
+/* ── Mode cards ── */
+.mode-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 12px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.mode-card.on5  { border-color: var(--accent5);  box-shadow: var(--glow5); }
+.mode-card.on15 { border-color: var(--accent15); box-shadow: var(--glow15); }
+
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+
+.card-label { display: flex; align-items: center; gap: 10px; }
+
+.badge {
+  width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
+}
+.badge5  { background: rgba(0,229,255,0.1);  color: var(--accent5); }
+.badge15 { background: rgba(255,107,53,0.1); color: var(--accent15); }
+
+.card-name { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+.card-sub  { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* Toggle */
+.tog { position: relative; width: 52px; height: 28px; flex-shrink: 0; }
+.tog input { opacity: 0; width: 0; height: 0; }
+.tog-track {
+  position: absolute; inset: 0;
+  background: var(--inactive); border-radius: 28px;
+  cursor: pointer; transition: background 0.3s;
+}
+.tog-track::after {
+  content: ''; position: absolute;
+  width: 22px; height: 22px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.tog5  input:checked ~ .tog-track { background: var(--accent5); }
+.tog15 input:checked ~ .tog-track { background: var(--accent15); }
+input:checked ~ .tog-track::after { transform: translateX(24px); }
+
+/* Dot grid */
+.dots { display: flex; flex-wrap: wrap; gap: 5px; }
+.dot {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 600;
+  background: var(--border); color: var(--text-dim);
+  transition: background 0.25s, color 0.25s, transform 0.2s;
+}
+.on5  .dot.d5  { background: rgba(0,229,255,0.18);  color: var(--accent5); }
+.on5  .dot.d15 { background: rgba(255,107,53,0.18); color: var(--accent15); }
+.on15 .dot.d15 { background: rgba(255,107,53,0.18); color: var(--accent15); }
+.dot.next { animation: dpulse 1s ease-in-out infinite; }
+@keyframes dpulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.25)} }
+
+/* ── Next alarm ── */
+.next-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 18px;
+  margin-bottom: 12px;
+  display: none;
+  align-items: center; justify-content: space-between;
+}
+.next-box.vis { display: flex; }
+.next-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+.next-time {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 30px; font-weight: 700; margin-top: 2px;
+}
+.nt5  { color: var(--accent5); }
+.nt15 { color: var(--accent15); }
+.cd-val { font-family:'Rajdhani',sans-serif; font-size:22px; font-weight:600; color:var(--text); text-align:right; }
+.cd-sub { font-size:10px; color:var(--text-dim); text-align:right; margin-top:1px; }
+
+/* ── Status ── */
+.status {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 13px 18px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.st-dot { width:8px; height:8px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
+.st-dot.s5  { background:var(--accent5);  box-shadow:0 0 8px var(--accent5);  animation:stblink 2s infinite; }
+.st-dot.s15 { background:var(--accent15); box-shadow:0 0 8px var(--accent15); animation:stblink 2s infinite; }
+@keyframes stblink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+.st-text { font-size:13px; color:var(--text-dim); }
+.st-text strong { color:var(--text); font-weight:700; }
+
+/* ── Buttons ── */
+.btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 11px;
+  padding: 11px 16px; font-family: 'Noto Sans JP', sans-serif;
+  font-size: 12px; cursor: pointer; width: 100%;
+  margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: border-color 0.2s, color 0.2s;
+  -webkit-appearance: none;
+}
+.btn:active { opacity: 0.65; }
+.btn.muted { border-color: #e05555; color: #e05555; }
+.btn.notif-on { border-color: rgba(0,229,255,0.4); color: var(--accent5); }
+
+/* ── PWA install banner ── */
+.install-banner {
+  background: linear-gradient(135deg, rgba(0,229,255,0.07), rgba(255,107,53,0.07));
+  border: 1px solid rgba(0,229,255,0.25);
+  border-radius: 14px; padding: 14px 16px;
+  margin-bottom: 12px; display: none;
+}
+.install-banner.vis { display: block; }
+.ib-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.ib-desc  { font-size:11px; color:var(--text-dim); line-height:1.7; }
+.ib-steps { margin-top:8px; display:flex; flex-direction:column; gap:4px; }
+.ib-step  { font-size:12px; color:var(--text-dim); display:flex; align-items:flex-start; gap:6px; }
+.ib-n {
+  width:16px; height:16px; border-radius:50%;
+  background: rgba(0,229,255,0.15); color:var(--accent5);
+  font-size:9px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;
+}
+
+/* ── Flash overlay ── */
+.flash {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 100; opacity: 0;
+  transition: opacity 0.08s;
+}
+.flash.f5  { background: rgba(0,229,255,0.12); }
+.flash.f15 { background: rgba(255,107,53,0.12); }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; top: calc(env(safe-area-inset-top,0px) + 16px);
+  left: 50%; transform: translateX(-50%) translateY(-90px);
+  background: var(--surface); border-radius: 12px;
+  padding: 11px 20px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+  z-index: 200; white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.t5  { border: 1px solid var(--accent5);  color: var(--accent5); }
+.toast.t15 { border: 1px solid var(--accent15); color: var(--accent15); }
+
+/* ── Warn badge ── */
+.warn {
+  position: fixed; bottom: calc(env(safe-area-inset-bottom,0px) + 28px);
+  left: 50%; transform: translateX(-50%);
+  border-radius: 100px; padding: 10px 26px;
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  z-index: 150; display: none;
+  animation: wp 1.2s ease-in-out infinite;
+}
+.warn.w5  { background:rgba(0,229,255,0.12); border:1px solid var(--accent5);  color:var(--accent5); }
+.warn.w15 { background:rgba(255,107,53,0.12); border:1px solid var(--accent15); color:var(--accent15); }
+@keyframes wp {
+  0%,100%{box-shadow:0 0 0 0 rgba(0,229,255,0)}
+  50%{box-shadow:0 0 0 10px rgba(0,229,255,0.08)}
+}
+</style>
+</head>
+<body>
+
+<div class="flash" id="flash"></div>
+<div class="toast" id="toast"></div>
+<div class="warn"  id="warn">● 環境確認 ●</div>
+
+<div class="container">
+  <header>
+    <div class="app-title">CHANCE ALARM</div>
+    <div class="clock" id="clock">
+      <span id="hh">00</span>:<span id="mm">00</span><span class="clock-sec">:<span id="ss">00</span></span>
+    </div>
+    <div class="date-str" id="dateStr">—</div>
+  </header>
+
+
+  <!-- 5分モード -->
+  <div class="mode-card" id="card5">
+    <div class="card-head">
+      <div class="card-label">
+        <div class="badge badge5">5M</div>
+        <div>
+          <div class="card-name">5分モード</div>
+          <div class="card-sub">5分刻みの1分前　15分は別音</div>
+        </div>
+      </div>
+      <label class="tog tog5">
+        <input type="checkbox" id="t5">
+        <span class="tog-track"></span>
+      </label>
+    </div>
+    <div class="dots" id="dots5"></div>
+  </div>
+
+  <!-- 15分モード -->
+  <div class="mode-card" id="card15">
+    <div class="card-head">
+      <div class="card-label">
+        <div class="badge badge15">15M</div>
+        <div>
+          <div class="card-name">15分モード</div>
+          <div class="card-sub">15分刻みの1分前</div>
+        </div>
+      </div>
+      <label class="tog tog15">
+        <input type="checkbox" id="t15">
+        <span class="tog-track"></span>
+      </label>
+    </div>
+    <div class="dots" id="dots15"></div>
+  </div>
+
+  <!-- Next alarm -->
+  <div class="next-box" id="nextBox">
+    <div>
+      <div class="next-lbl">次のアラーム</div>
+      <div class="next-time" id="nextTime">xx:--</div>
+    </div>
+    <div>
+      <div class="cd-val" id="cdVal">--:--</div>
+      <div class="cd-sub">まで</div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status">
+    <div class="st-dot" id="stDot"></div>
+    <div class="st-text" id="stText">アラームはオフです</div>
+  </div>
+
+  <button class="btn" id="muteBtn" onclick="toggleMute()">
+    <span id="muteIco">🔔</span><span id="muteLbl">サウンドON</span>
+  </button>
+  <button class="btn" id="notifBtn" onclick="reqNotif()">
+    🔔 通知を許可する（バックグラウンド対応）
+  </button>
+</div>
+
+<script>
+// ── State ──
+let mode = null, muted = false, audioCtx = null, lastMin = -1, warnTimer = null;
+
+const A5  = [4,9,14,19,24,29,34,39,44,49,54,59];
+const A15 = [14,29,44,59];
+const is15 = m => A15.includes(m);
+const pad  = n => String(n).padStart(2,'0');
+
+// ── Audio ──
+function getCtx(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  return audioCtx;
+}
+function beep(type){
+  try{
+    const ctx = getCtx();
+    if(ctx.state==='suspended') ctx.resume();
+    const t = ctx.currentTime;
+    if(type==='5'){
+      [0,0.2].forEach(off=>{
+        const o=ctx.createOscillator(), g=ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type='sine'; o.frequency.value=1300;
+        g.gain.setValueAtTime(0,t+off);
+        g.gain.linearRampToValueAtTime(0.45,t+off+0.02);
+        g.gain.exponentialRampToValueAtTime(0.001,t+off+0.14);
+        o.start(t+off); o.stop(t+off+0.15);
+      });
+    } else {
+      [440,554,659].forEach(f=>{
+        [0,0.22,0.44].forEach(off=>{
+          const o=ctx.createOscillator(), g=ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.type='triangle'; o.frequency.value=f;
+          g.gain.setValueAtTime(0,t+off);
+          g.gain.linearRampToValueAtTime(0.18,t+off+0.02);
+          g.gain.exponentialRampToValueAtTime(0.001,t+off+0.18);
+          o.start(t+off); o.stop(t+off+0.2);
+        });
+      });
+    }
+  } catch(e){}
+}
+
+// ── Notif ──
+function reqNotif(){
+  if('Notification' in window){
+    Notification.requestPermission().then(p=>{
+      if(p==='granted'){
+        document.getElementById('notifBtn').className='btn notif-on';
+        document.getElementById('notifBtn').textContent='✓ 通知: 許可済み';
+      }
+    });
+  }
+}
+function sendNotif(title, body){
+  if('Notification' in window && Notification.permission==='granted')
+    new Notification(title,{body});
+}
+
+// ── Flash / Toast / Warn ──
+function flash(type){
+  const el=document.getElementById('flash');
+  el.className=`flash f${type}`; el.style.opacity='1';
+  setTimeout(()=>{el.style.opacity='0';},280);
+}
+function showToast(txt,type){
+  const t=document.getElementById('toast');
+  t.textContent=txt; t.className=`toast t${type} show`;
+  setTimeout(()=>t.classList.remove('show'),3200);
+}
+function showWarn(type){
+  const w=document.getElementById('warn');
+  w.className=`warn w${type}`; w.style.display='block';
+  if(warnTimer) clearTimeout(warnTimer);
+  warnTimer=setTimeout(()=>{w.style.display='none';},30000);
+}
+
+// ── Build dot grids ──
+function buildDots(){
+  const el5=document.getElementById('dots5');
+  A5.forEach(m=>{
+    const d=document.createElement('div');
+    d.className=`dot ${is15(m)?'d15':'d5'}`; d.id=`d5-${m}`;
+    d.textContent=pad(m); el5.appendChild(d);
+  });
+  const el15=document.getElementById('dots15');
+  A15.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='dot d15'; d.id=`d15-${m}`;
+    d.textContent=pad(m); el15.appendChild(d);
+  });
+}
+
+// ── Toggles ──
+document.getElementById('t5').addEventListener('change',function(){
+  if(this.checked){ mode='5'; document.getElementById('t15').checked=false; }
+  else if(mode==='5') mode=null;
+  updateUI();
+});
+document.getElementById('t15').addEventListener('change',function(){
+  if(this.checked){ mode='15'; document.getElementById('t5').checked=false; }
+  else if(mode==='15') mode=null;
+  updateUI();
+});
+
+function toggleMute(){
+  muted=!muted;
+  document.getElementById('muteBtn').className='btn'+(muted?' muted':'');
+  document.getElementById('muteIco').textContent=muted?'🔕':'🔔';
+  document.getElementById('muteLbl').textContent=muted?'サウンドOFF（ミュート中）':'サウンドON';
+}
+
+// ── Update UI ──
+function updateUI(){
+  const c5=document.getElementById('card5'), c15=document.getElementById('card15');
+  const clk=document.getElementById('clock');
+  const dot=document.getElementById('stDot'), txt=document.getElementById('stText');
+  const nb=document.getElementById('nextBox');
+  c5.className='mode-card'+(mode==='5'?' on5':'');
+  c15.className='mode-card'+(mode==='15'?' on15':'');
+  clk.className='clock'+(mode?` m${mode}`:'');
+  if(mode==='5'){ dot.className='st-dot s5'; txt.innerHTML='<strong>5分モード</strong> 稼働中'; nb.classList.add('vis'); }
+  else if(mode==='15'){ dot.className='st-dot s15'; txt.innerHTML='<strong>15分モード</strong> 稼働中'; nb.classList.add('vis'); }
+  else { dot.className='st-dot'; txt.textContent='アラームはオフです'; nb.classList.remove('vis'); }
+}
+
+// ── Main tick ──
+function tick(){
+  const now=new Date();
+  const h=now.getHours(), m=now.getMinutes(), s=now.getSeconds();
+  document.getElementById('hh').textContent=pad(h);
+  document.getElementById('mm').textContent=pad(m);
+  document.getElementById('ss').textContent=pad(s);
+  const days=['日','月','火','水','木','金','土'];
+  document.getElementById('dateStr').textContent=
+    `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())} (${days[now.getDay()]})`;
+
+  // Clear next highlight
+  document.querySelectorAll('.dot.next').forEach(d=>d.classList.remove('next'));
+
+  if(mode){
+    const alarms = mode==='5' ? A5 : A15;
+    // Find next alarm
+    let next = alarms.find(a=>a>m||(a===m&&s===0)) ?? alarms[0];
+    const secsLeft = ((next-m)*60 - s + 3600) % 3600 || 3600;
+    const mm=Math.floor(secsLeft/60), ss2=secsLeft%60;
+    const nt=document.getElementById('nextTime');
+    nt.textContent=`xx:${pad(next)}`;
+    nt.className=`next-time ${is15(next)?'nt15':('nt'+mode)}`;
+    document.getElementById('cdVal').textContent=`${mm}:${pad(ss2)}`;
+
+    const dEl=document.getElementById(`d${mode}-${next}`);
+    if(dEl) dEl.classList.add('next');
+
+    // Trigger alarm
+    if(s===0 && alarms.includes(m) && m!==lastMin){
+      lastMin=m;
+      const snd=(mode==='5'&&!is15(m))?'5':'15';
+      const label=is15(m)?`⚡ 15分チャンス — :${pad((m+1)%60)} まで1分！`:`🔔 5分チャンス — :${pad((m+1)%60)} まで1分！`;
+      if(!muted) beep(snd);
+      flash(snd); showToast(label,snd); showWarn(snd);
+      sendNotif('チャンスアラーム', label);
+    }
+  } else { lastMin=-1; }
+}
+
+
+
+// ── Init ──
+buildDots(); updateUI(); tick();
+setInterval(tick, 500);
+
+if('Notification' in window && Notification.permission==='granted'){
+  document.getElementById('notifBtn').className='btn notif-on';
+  document.getElementById('notifBtn').textContent='✓ 通知: 許可済み';
+}
+
+document.addEventListener('touchstart', function unlock(){
+  try{ const c=getCtx(); if(c.state==='suspended') c.resume(); }catch(e){}
+  document.removeEventListener('touchstart',unlock);
+},{once:true,passive:true});
+</script>
+</body>
+</html>
