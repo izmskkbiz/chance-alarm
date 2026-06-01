@@ -556,6 +556,18 @@ function tick(){
       sendNotif('チャンスアラーム', label);
     }
   } else { lastMin=-1; }
+
+  // ── タブタイトル更新 ──
+  if(mode){
+    const alarms = mode==='5' ? A5 : A15;
+    let next = alarms.find(a=>a>m||(a===m&&s===0)) ?? alarms[0];
+    const secsLeft = ((next-m)*60 - s + 3600) % 3600 || 3600;
+    const mm2=Math.floor(secsLeft/60), ss3=secsLeft%60;
+    const icon = mode==='5' ? '🔵' : '🟠';
+    document.title = `${icon} 次:${pad(next)} あと${mm2}:${pad(ss3)} | ${pad(h)}:${pad(m)}:${pad(s)}`;
+  } else {
+    document.title = `⏸ ${pad(h)}:${pad(m)}:${pad(s)} | チャンスアラーム`;
+  }
 }
 
 
